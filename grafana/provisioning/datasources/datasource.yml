@@ -1,0 +1,25 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: JSON API
+    type: marcusolsson-json-datasource
+    url: http://backend:8080
+    access: proxy
+    isDefault: false
+    jsonData:
+      timeout: 60
+      routes:
+        - method: GET
+          path: /stats/advertisers/${advertiserId}/campaigns
+        - method: GET
+          path: /stats/advertisers/${advertiserId}/campaigns/daily
+        - method: GET
+          path: /stats/campaigns/${campaignId}
+        - method: GET
+          path: /stats/campaigns/${campaignId}/daily

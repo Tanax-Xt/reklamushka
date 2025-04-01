@@ -1,0 +1,171 @@
+# WARNING: не запускайте несколько копий проекта одновременно,
+# поскольку в docker-compose подставлен токен определенного ТГ-бота
+# и одновременный запуск нескольких инстансов может привести к ошибке.
+# При необходимости запустить нескольких контейнеров поменяйте токен
+
+version: '3.8'
+
+services:
+  backend:
+    container_name: backend
+    build:
+      context: .
+      dockerfile: DockerfileApp
+    volumes:
+      - .:/app
+    hostname: backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:root@db:5432/prod3
+      - REDIS_URL=redis://6379:6379/0
+      - YANDEX_GPT_API_KEY=SECRET
+      - FOLDER_ID=SECRET
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      test:
+        condition: service_started
+      s3-storage:
+        condition: service_started
+    ports:
+      - 8080:8080
+    restart: unless-stopped
+
+  db:
+    image: postgres:latest
+    container_name: db
+    environment:
+      POSTGRES_DB: prod3
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+#    ports:
+#      - 5432:5432
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+#    ports:
+#      - 6379:6379
+    restart: unless-stopped
+
+  test:
+    container_name: test-e2e
+    build:
+      context: .
+      dockerfile: DockerfileTests
+    environment:
+      - DATABASE_URL=postgresql://postgres:root@db-test:5432/test
+    depends_on:
+      redis:
+        condition: service_healthy
+      db-test:
+        condition: service_healthy
+    restart: "no"
+
+  db-test:
+    image: postgres:latest
+    container_name: db-test
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    hostname: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+    ports:
+      - 9090:9090
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - 9100:9100
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    user: root
+    container_name: grafana
+    hostname: grafana
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
+
+  alertmanager:
+    build:
+      context: ./alertmanager
+      dockerfile: DockerfileAlert
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    environment:
+      - TELEGRAM_ALERT_BOT_TOKEN=SECRET
+      - TELEGRAM_ID=SECRET
+    restart: unless-stopped
+
+  bot:
+    build:
+      dockerfile: DockerfileBot
+    container_name: bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=SECRET
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  s3-storage:
+    image: quay.io/minio/minio
+    container_name: s3-storage
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - ~/minio/data:/data
+    environment:
+      MINIO_ROOT_USER: root
+      MINIO_ROOT_PASSWORD: password
+    command: server /data --console-address ":9001"
+
+volumes:
+  postgres_data:
+  redis_data:
+  grafana-data:
+  minio_data:

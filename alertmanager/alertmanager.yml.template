@@ -1,0 +1,13 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "telegram"
+
+receivers:
+  - name: "telegram"
+    telegram_configs:
+      - bot_token: ${TELEGRAM_ALERT_BOT_TOKEN}
+        chat_id: ${TELEGRAM_ID}
+        message: "!! WARNING !!\n\n{{ if .CommonAnnotations.summary }}{{ .CommonAnnotations.summary }}{{ else }}Alert triggered!{{ end }}"
+

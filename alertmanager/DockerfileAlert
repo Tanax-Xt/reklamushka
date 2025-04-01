@@ -1,0 +1,11 @@
+FROM prom/alertmanager:latest AS builder
+
+FROM alpine:latest
+
+RUN apk add --no-cache gettext
+
+COPY --from=builder /bin/alertmanager /bin/alertmanager
+
+COPY alertmanager.yml.template /etc/alertmanager/alertmanager.yml.template
+
+CMD ["sh", "-c", "envsubst < /etc/alertmanager/alertmanager.yml.template > /etc/alertmanager/alertmanager.yml && exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml"]
