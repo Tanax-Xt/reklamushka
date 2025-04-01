@@ -1,0 +1,1 @@
+from src.api.statistics.advertisers.routes import advertisers_statistics_router
